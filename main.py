@@ -14,7 +14,7 @@ args.add_argument('--h_or_t', type=str, default='t')
 args.add_argument('--dropout', type=float, default=0.4)
 args.add_argument('--dataset', type=str, default='ICEWS14')
 args.add_argument('--name', type=str, default=' ')
-args.add_argument('--negative_size', type = int, default=128)
+args.add_argument('--negative_size', type = int, default=16)
 args = args.parse_args()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
