@@ -164,11 +164,11 @@ for i in range(1, epochs + 1):
         scores = model.forward(inputs, rels, ts, labels)
         #positive_loss = model.loss(scores, labels)
         positive_loss = model.loss(scores)
-        print('pos: ', positive_loss)
+        #print('pos: ', positive_loss)
         '''negative_score = model.neg_loss(scores, neg_labels)
         negative_loss = model.loss(negative_score)'''
         negative_loss = model.neg_loss(inputs, rels, ts, neg_labels)
-        print('neg: ', negative_loss)
+        #print('neg: ', negative_loss)
         loss = positive_loss + negative_loss
         total_loss += loss.item()
         loss.backward()
