@@ -5,7 +5,7 @@
 import argparse
 
 args = argparse.ArgumentParser()
-
+args.add_argument('--dim', type=int, default=512)
 args.add_argument('--batch_size', type=int, default=1024)
 args.add_argument('--epochs', type=int, default=1000)
 args.add_argument('--valid_epochs', type=int, default=5)

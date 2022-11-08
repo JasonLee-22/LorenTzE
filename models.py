@@ -182,7 +182,7 @@ class LorenTzE_core(nn.Module):
         nn.init.xavier_normal_(self.R_z.weight.data)
         nn.init.xavier_normal_(self.cores.weight.data)
 
-    def forward(self, head, rel, timestamp, target):
+    def forward(self, head, rel, timestamp):
         '''head = head.view(-1)
         rel = rel.view(-1)
         timestamp = timestamp.view(-1)'''
@@ -240,14 +240,7 @@ class LorenTzE_core(nn.Module):
         t_y = self.drop_out(t_y)
         t_z = self.drop_out(t_z)
 
-        score_x = torch.bmm(t_x.unsqueeze(1), self.E_x(target).unsqueeze(2)).squeeze()
-        score_y = torch.bmm(t_y.unsqueeze(1), self.E_y(target).unsqueeze(2)).squeeze()
-        score_z = torch.bmm(t_z.unsqueeze(1), self.E_z(target).unsqueeze(2)).squeeze()
-        '''print(time.shape)
-        temp = time.expand(self.entities_num, self.embedding_dim)
-        print(temp.shape)'''
-        ct_measure = torch.bmm(time, self.cores(target).unsqueeze(2)).squeeze()
-        score_ct = torch.bmm(t_ct.unsqueeze(1), ct_measure.unsqueeze(2)).squeeze()
+
         #score_ct = torch.bmm(t_ct.unsqueeze(2).transpose(2, 1), ct_measure.unsqueeze(2)).squeeze()
         #print(score_ct.shape)
         #score_ct = torch.mm(t_ct, self.cores.weight.transpose(1,0))
@@ -265,11 +258,21 @@ class LorenTzE_core(nn.Module):
         '''t_score = torch.sum((h_ct - t_ct)**2, dim=1)
         t_score = F.relu(t_score + self.bias)'''
 
-        return score_x, score_y, score_z, score_ct
+        #return score_x, score_y, score_z, score_ct
+        return t_x, t_y, t_z, t_ct
 
-    def loss(self, scores):
+    def loss(self, scores, target, timestamp):
         # print("in loss:{}".format(torch.cuda.memory_allocated(0)))
-        score_x, score_y, score_z, score_ct= scores
+        t_x, t_y, t_z, t_ct= scores
+        score_x = torch.bmm(t_x.unsqueeze(1), self.E_x(target).unsqueeze(2)).squeeze()
+        score_y = torch.bmm(t_y.unsqueeze(1), self.E_y(target).unsqueeze(2)).squeeze()
+        score_z = torch.bmm(t_z.unsqueeze(1), self.E_z(target).unsqueeze(2)).squeeze()
+        '''print(time.shape)
+        temp = time.expand(self.entities_num, self.embedding_dim)
+        print(temp.shape)'''
+        time = self.time_mat[timestamp]
+        ct_measure = torch.bmm(time, self.cores(target).unsqueeze(2)).squeeze()
+        score_ct = torch.bmm(t_ct.unsqueeze(1), ct_measure.unsqueeze(2)).squeeze()
         score_x = -F.logsigmoid(score_x).mean()
         score_y = -F.logsigmoid(score_y).mean()
         score_z = -F.logsigmoid(score_z).mean()

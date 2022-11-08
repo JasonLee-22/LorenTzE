@@ -198,6 +198,7 @@ for i in range(1, epochs + 1):
     to_be_filtered = [(i[0], i[1], i[2], i[3]) for i in train]
     #print(len(to_be_filtered))
     to_be_filtered += [(i[0], i[1], i[2], i[3]) for i in valid]
+    to_be_filtered += [(i[0], i[1], i[2], i[3]) for i in test]
     to_be_filtered = set(to_be_filtered)
     #print(len(to_be_filtered))
     while v_end <= valid.shape[0]:
@@ -213,7 +214,7 @@ for i in range(1, epochs + 1):
             ts = torch.LongTensor(valid[v_start:v_end, 3]).to('cuda')
 
         #print("before for:{}".format(torch.cuda.memory_allocated(0)))
-        scores = model.forward(inputs, rels, ts, labels)
+        scores = model.forward(inputs, rels, ts)
         #print("after for:{}".format(torch.cuda.memory_allocated(0)))
         #loss = model.loss(scores, labels)
         loss = model.loss(scores)
@@ -221,7 +222,9 @@ for i in range(1, epochs + 1):
         v_loss += loss.item()
         #scores = scores[0] + scores[1] + scores[2]
         #print(v_start, v_end, valid.shape)
-        v_mr, v_mrr, v_hits1, v_hits3, v_hits10 = metric(h_or_t, entity_num, scores, to_be_filtered, torch.LongTensor(valid[v_start:v_end]), v_end - v_start)
+        #v_mr, v_mrr, v_hits1, v_hits3, v_hits10 = metric(h_or_t, entity_num, scores, to_be_filtered, torch.LongTensor(valid[v_start:v_end]), v_end - v_start)
+        v_mr, v_mrr, v_hits1, v_hits3, v_hits10 = specific_ranking(h_or_t=h_or_t, batch_size=v_end - v_start, entities_num=entity_num, to_be_filtered=to_be_filtered,
+                                                         samples = torch.LongTensor(valid[v_start:v_end]), model = model)
         #print("after metric:{}".format(torch.cuda.memory_allocated(0)))
         mr += v_mr * (v_end- v_start)
         mrr += v_mrr * (v_end - v_start)

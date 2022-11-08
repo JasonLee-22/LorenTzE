@@ -9,8 +9,12 @@ def load_quadruples(file_name):
     for line in f.readlines():
         ls = line.strip().split()
         head, rel, tail, timestamp = ls[0], ls[1], ls[2], ls[3]
-        quadruples.append([int(head), int(rel), int(tail), int(timestamp)/24])
-        timestamps.add(int(timestamp))
+        if 'GDELT' in file_name:
+            quadruples.append([int(head), int(rel), int(tail), int(timestamp) / 15])
+            timestamps.add(int(timestamp) / 15)
+        else:
+            quadruples.append([int(head), int(rel), int(tail), int(timestamp)/24])
+            timestamps.add(int(timestamp)/24)
     timestamps = list(timestamps)
     timestamps.sort()
 
@@ -66,6 +70,44 @@ def ranking(h_or_t, entities_num, scores, batch_size, h, r, t, time, to_be_filte
             rank += 1
             ranks.append(rank)
     return torch.Tensor(ranks)
+
+
+def specific_ranking(h_or_t, entities_num, batch_size, samples, to_be_filtered, model):
+    mrr = 0
+    mr = 0
+    hits1 = 0
+    hits3 = 0
+    hits10 = 0
+    for i in range(batch_size):
+        if h_or_t == 't':
+            head, rel, tail, ts = samples[i]
+            rank_list = [(head, rel, j, ts) for j in range(entities_num)]
+            rank_list = list(set(rank_list) - to_be_filtered)
+            rank_list = [head, rel, tail, ts] + rank_list
+            rank_list = torch.LongTensor(rank_list)
+            scores = model.forward(rank_list)
+            ranks = (scores > scores[0]).sum() + 1
+        else:
+            head, rel, tail, ts = samples[i]
+            rank_list = [(j, rel, tail, ts) for j in range(entities_num)]
+            rank_list = list(set(rank_list) - to_be_filtered)
+            rank_list = [head, rel, tail, ts] + rank_list
+            rank_list = torch.LongTensor(rank_list)
+            scores = model.forward(rank_list)
+            ranks = (scores > scores[0]).sum() + 1
+        mrr += 1.0/ranks
+        mr += ranks
+        if ranks == 1:
+            hits1 += 1
+        if ranks <= 3:
+            hits3 += 1
+        if ranks <= 10:
+            hits10 += 1
+
+    return mr/batch_size, mrr/batch_size , hits1, hits3, hits10
+
+
+
 
 def metric(h_or_t, entities_num, scores, to_be_filtered, test_data, batch_size, hits = [1, 3, 10]):
     with torch.no_grad():
