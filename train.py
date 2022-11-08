@@ -161,9 +161,9 @@ for i in range(1, epochs + 1):
             neg_labels = torch.LongTensor(neg_heads).to('cuda')
 
 
-        scores = model.forward(inputs, rels, ts, labels)
+        scores = model.forward(inputs, rels, ts)
         #positive_loss = model.loss(scores, labels)
-        positive_loss = model.loss(scores)
+        positive_loss = model.loss(scores, labels, ts)
         #print('pos: ', positive_loss)
         '''negative_score = model.neg_loss(scores, neg_labels)
         negative_loss = model.loss(negative_score)'''
@@ -217,7 +217,7 @@ for i in range(1, epochs + 1):
         scores = model.forward(inputs, rels, ts)
         #print("after for:{}".format(torch.cuda.memory_allocated(0)))
         #loss = model.loss(scores, labels)
-        loss = model.loss(scores)
+        loss = model.loss(scores, labels, ts)
         #print("after loss:{}".format(torch.cuda.memory_allocated(0)))
         v_loss += loss.item()
         #scores = scores[0] + scores[1] + scores[2]
