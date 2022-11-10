@@ -192,7 +192,7 @@ class LorenTzE_core(nn.Module):
         h_z = self.E_z(head)
 
         #time = self.T_ct(timestamp)
-        time = self.time_mat[timestamp]
+        time = torch.sigmoid(self.time_mat[timestamp])
         core_time = self.cores(head)
         h_ct = torch.bmm(time, core_time.unsqueeze(2)).squeeze()
 
@@ -270,7 +270,7 @@ class LorenTzE_core(nn.Module):
         '''print(time.shape)
         temp = time.expand(self.entities_num, self.embedding_dim)
         print(temp.shape)'''
-        time = self.time_mat[timestamp]
+        time = torch.sigmoid(self.time_mat[timestamp])
         ct_measure = torch.bmm(time, self.cores(target).unsqueeze(2)).squeeze()
         score_ct = torch.bmm(t_ct.unsqueeze(1), ct_measure.unsqueeze(2)).squeeze()
         score_x = -F.logsigmoid(score_x).mean()
@@ -284,11 +284,17 @@ class LorenTzE_core(nn.Module):
     def neg_loss(self, head, rel, timestamp, neg_label):
         LOSS = torch.zeros(neg_label.shape[0]).to('cuda')
         for i in range(neg_label.shape[1]):
-            neg_x, neg_y, neg_z, neg_ct = self.forward(head, rel, timestamp, neg_label[:, i])
-            neg_x = -F.logsigmoid(-neg_x)
-            neg_y = -F.logsigmoid(-neg_y)
-            neg_z = -F.logsigmoid(-neg_z)
-            neg_ct = -F.logsigmoid(-neg_ct)
+            neg_x, neg_y, neg_z, neg_ct = self.forward(head, rel, timestamp)
+            score_x = torch.bmm(neg_x.unsqueeze(1), self.E_x(neg_label[:, i]).unsqueeze(2)).squeeze()
+            score_y = torch.bmm(neg_y.unsqueeze(1), self.E_y(neg_label[:, i]).unsqueeze(2)).squeeze()
+            score_z = torch.bmm(neg_z.unsqueeze(1), self.E_z(neg_label[:, i]).unsqueeze(2)).squeeze()
+            time = torch.sigmoid(self.time_mat[timestamp])
+            ct_measure = torch.bmm(time, self.cores(neg_label[:, i]).unsqueeze(2)).squeeze()
+            score_ct = torch.bmm(neg_ct.unsqueeze(1), ct_measure.unsqueeze(2)).squeeze()
+            neg_x = -F.logsigmoid(-score_x)
+            neg_y = -F.logsigmoid(-score_y)
+            neg_z = -F.logsigmoid(-score_z)
+            neg_ct = -F.logsigmoid(-score_ct)
             temp = neg_x + neg_y + neg_z + neg_ct
             LOSS += temp
 
