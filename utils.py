@@ -84,16 +84,18 @@ def specific_ranking(h_or_t, entities_num, batch_size, samples, to_be_filtered, 
             rank_list = [(head, rel, j, ts) for j in range(entities_num)]
             rank_list = list(set(rank_list) - to_be_filtered)
             rank_list = [(head, rel, tail, ts)] + rank_list
-            rank_list = torch.LongTensor(rank_list)
+            rank_list = torch.LongTensor(rank_list).to('cuda')
             scores = model.forward(rank_list[:, 0], rank_list[:, 1], rank_list[:, 3])
+            scores = model.test_score(scores, rank_list[:, 2], rank_list[:, 3])
             ranks = (scores > scores[0]).sum() + 1
         else:
             head, rel, tail, ts = samples[i]
             rank_list = [(j, rel, tail, ts) for j in range(entities_num)]
             rank_list = list(set(rank_list) - to_be_filtered)
             rank_list = [(head, rel, tail, ts)] + rank_list
-            rank_list = torch.LongTensor(rank_list)
+            rank_list = torch.LongTensor(rank_list).to('cuda')
             scores = model.forward(rank_list[:, 2], rank_list[:, 1], rank_list[:, 3])
+            scores = model.test_score(scores, rank_list[:, 0], rank_list[:, 3])
             ranks = (scores > scores[0]).sum() + 1
         mrr += 1.0/ranks
         mr += ranks

@@ -280,7 +280,22 @@ class LorenTzE_core(nn.Module):
         '''t = torch.sum(t)/len(t)'''
         return score_x + score_y + score_z + score_ct
         # return self.bce(x, target) + self.bce(y, target) + self.bce(z, target)
-
+    def test_score(self, scores, target, timestamp):
+        t_x, t_y, t_z, t_ct = scores
+        score_x = torch.bmm(t_x.unsqueeze(1), self.E_x(target).unsqueeze(2)).squeeze()
+        score_y = torch.bmm(t_y.unsqueeze(1), self.E_y(target).unsqueeze(2)).squeeze()
+        score_z = torch.bmm(t_z.unsqueeze(1), self.E_z(target).unsqueeze(2)).squeeze()
+        '''print(time.shape)
+        temp = time.expand(self.entities_num, self.embedding_dim)
+        print(temp.shape)'''
+        time = torch.sigmoid(self.time_mat[timestamp])
+        ct_measure = torch.bmm(time, self.cores(target).unsqueeze(2)).squeeze()
+        score_ct = torch.bmm(t_ct.unsqueeze(1), ct_measure.unsqueeze(2)).squeeze()
+        '''score_x = -F.logsigmoid(score_x)
+        score_y = -F.logsigmoid(score_y)
+        score_z = -F.logsigmoid(score_z)
+        score_ct = -F.logsigmoid(score_ct)'''
+        return score_x + score_y + score_z + score_ct
     def neg_loss(self, head, rel, timestamp, neg_label):
         LOSS = torch.zeros(neg_label.shape[0]).to('cuda')
         for i in range(neg_label.shape[1]):
