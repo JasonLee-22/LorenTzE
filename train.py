@@ -1,3 +1,6 @@
+
+
+#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
 import torch
 import numpy as np
 from models import LorenTzE, LorenTzE_core
@@ -35,10 +38,10 @@ def test_step(model, train, valid, test, batch_size, fout):
             rels = torch.LongTensor(test[t_start:t_end, 1]).to('cuda')
             ts = torch.LongTensor(test[t_start:t_end, 3]).to('cuda')
 
-        test_score = model.forward(inputs, rels, ts, labels)
+        #test_score = model.forward(inputs, rels, ts)
         #test_score = test_score[0] + test_score[1] + test_score[2]
-        test_mr, test_mrr, test_hits1, test_hits3, test_hits10 = metric(h_or_t, entity_num, test_score, test_filtered,
-                                                                        test[t_start: t_end], t_end - t_start)
+        test_mr, test_mrr, test_hits1, test_hits3, test_hits10 = specific_ranking(h_or_t=h_or_t, batch_size=t_end - t_start, entities_num=entity_num, to_be_filtered=test_filtered,
+                                                         samples = torch.LongTensor(test[t_start:t_end]), model = model)
         mr += test_mr * (t_end - t_start)
         mrr += test_mrr * (t_end - t_start)
         hits1 += test_hits1
@@ -94,6 +97,7 @@ lr = args.lr
 h_or_t = args.h_or_t
 name = args.name
 neg_size = args.negative_size
+valid_epochs = args.valid_epochs
 
 if not os.path.exists('./output'):
     os.mkdir('./output')
@@ -112,6 +116,7 @@ best_hits10 = 0
 best_epoch = -1
 
 embedding_dim = args.dim
+time_dim = args.dim
 
 
 entity_num, relation_num, time_num = 0,0,0
@@ -123,13 +128,18 @@ relation_num = int(relation_num)
 time_num = int(time_num)
 
 
-model = LorenTzE_core(embedding_dim, entity_num, relation_num, time_num, dropout)
+model = LorenTzE_core(embedding_dim, time_dim, entity_num, relation_num, time_num, dropout)
 model.to('cuda')
 model.init()
 train = np.asarray(train)
 valid = np.asarray(valid)
 test = np.asarray(test)
 
+to_be_filtered = [(i[0], i[1], i[2], i[3]) for i in train]
+# print(len(to_be_filtered))
+to_be_filtered += [(i[0], i[1], i[2], i[3]) for i in valid]
+to_be_filtered += [(i[0], i[1], i[2], i[3]) for i in test]
+to_be_filtered = set(to_be_filtered)
 
 #scheduler = StepLR(optimizer, step_size=10, gamma=0.9)
 
@@ -138,7 +148,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 for i in range(1, epochs + 1):
     model.train()
     if i >=300 and i % 10 == 0:
-        lr = lr * 0.9
+        lr = lr * 0.95
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     optimizer.zero_grad()
     start = 0
@@ -160,14 +170,17 @@ for i in range(1, epochs + 1):
             neg_heads = neg_sample(train[start:end], neg_size, h_or_t, entity_num)
             neg_labels = torch.LongTensor(neg_heads).to('cuda')
 
-
+        #print('before: ', torch.cuda.memory_allocated(0))
         scores = model.forward(inputs, rels, ts)
+        #print('pos_score: ', torch.cuda.memory_allocated(0))
         #positive_loss = model.loss(scores, labels)
         positive_loss = model.loss(scores, labels, ts)
+        #print('pos_loss: ', torch.cuda.memory_allocated(0))
         #print('pos: ', positive_loss)
         '''negative_score = model.neg_loss(scores, neg_labels)
         negative_loss = model.loss(negative_score)'''
         negative_loss = model.neg_loss(inputs, rels, ts, neg_labels)
+        #print('neg_loss: ', torch.cuda.memory_allocated(0))
         #print('neg: ', negative_loss)
         loss = positive_loss + negative_loss
         total_loss += loss.item()
@@ -186,79 +199,83 @@ for i in range(1, epochs + 1):
 
 
     #validation:
-    model.eval()
-    v_start = 0
-    v_end = batch_size
-    v_loss = 0
-    mr = 0
-    mrr = 0
-    hits1 = 0
-    hits3 = 0
-    hits10 = 0
-    to_be_filtered = [(i[0], i[1], i[2], i[3]) for i in train]
-    #print(len(to_be_filtered))
-    to_be_filtered += [(i[0], i[1], i[2], i[3]) for i in valid]
-    to_be_filtered += [(i[0], i[1], i[2], i[3]) for i in test]
-    to_be_filtered = set(to_be_filtered)
-    #print(len(to_be_filtered))
-    while v_end <= valid.shape[0]:
-        if h_or_t == 't':
-            labels = torch.LongTensor(valid[v_start:v_end, 2]).to('cuda')
-            inputs = torch.LongTensor(valid[v_start:v_end, 0]).to('cuda')
-            rels = torch.LongTensor(valid[v_start:v_end, 1]).to('cuda')
-            ts = torch.LongTensor(valid[v_start:v_end, 3]).to('cuda')
-        else:
-            labels = torch.LongTensor(valid[v_start:v_end, 0]).to('cuda')
-            inputs = torch.LongTensor(valid[v_start:v_end, 2]).to('cuda')
-            rels = torch.LongTensor(valid[v_start:v_end, 1]).to('cuda')
-            ts = torch.LongTensor(valid[v_start:v_end, 3]).to('cuda')
+    if i % valid_epochs == 0:
+        model.eval()
+        v_start = 0
+        v_end = batch_size
+        v_loss = 0
+        mr = 0
+        mrr = 0
+        hits1 = 0
+        hits3 = 0
+        hits10 = 0
+        # print(len(to_be_filtered))
+        while v_end <= valid.shape[0]:
+            if h_or_t == 't':
+                labels = torch.LongTensor(valid[v_start:v_end, 2]).to('cuda')
+                inputs = torch.LongTensor(valid[v_start:v_end, 0]).to('cuda')
+                rels = torch.LongTensor(valid[v_start:v_end, 1]).to('cuda')
+                ts = torch.LongTensor(valid[v_start:v_end, 3]).to('cuda')
+            else:
+                labels = torch.LongTensor(valid[v_start:v_end, 0]).to('cuda')
+                inputs = torch.LongTensor(valid[v_start:v_end, 2]).to('cuda')
+                rels = torch.LongTensor(valid[v_start:v_end, 1]).to('cuda')
+                ts = torch.LongTensor(valid[v_start:v_end, 3]).to('cuda')
 
-        #print("before for:{}".format(torch.cuda.memory_allocated(0)))
-        scores = model.forward(inputs, rels, ts)
-        #print("after for:{}".format(torch.cuda.memory_allocated(0)))
-        #loss = model.loss(scores, labels)
-        loss = model.loss(scores, labels, ts)
-        #print("after loss:{}".format(torch.cuda.memory_allocated(0)))
-        v_loss += loss.item()
-        #scores = scores[0] + scores[1] + scores[2]
-        #print(v_start, v_end, valid.shape)
-        #v_mr, v_mrr, v_hits1, v_hits3, v_hits10 = metric(h_or_t, entity_num, scores, to_be_filtered, torch.LongTensor(valid[v_start:v_end]), v_end - v_start)
-        v_mr, v_mrr, v_hits1, v_hits3, v_hits10 = specific_ranking(h_or_t=h_or_t, batch_size=v_end - v_start, entities_num=entity_num, to_be_filtered=to_be_filtered,
-                                                         samples = torch.LongTensor(valid[v_start:v_end]), model = model)
-        #print("after metric:{}".format(torch.cuda.memory_allocated(0)))
-        mr += v_mr * (v_end- v_start)
-        mrr += v_mrr * (v_end - v_start)
-        hits1 += v_hits1
-        hits3 += v_hits3
-        hits10 += v_hits10
-        if v_end == valid.shape[0]:
-            break
-        else:
-            v_start = v_end
-            v_end = min(v_end + batch_size, valid.shape[0])
+            # print("before for:{}".format(torch.cuda.memory_allocated(0)))
+            scores = model.forward(inputs, rels, ts)
+            # print("after for:{}".format(torch.cuda.memory_allocated(0)))
+            # loss = model.loss(scores, labels)
+            loss = model.loss(scores, labels, ts)
+            # print("after loss:{}".format(torch.cuda.memory_allocated(0)))
+            v_loss += loss.item()
+            # scores = scores[0] + scores[1] + scores[2]
+            # print(v_start, v_end, valid.shape)
+            # v_mr, v_mrr, v_hits1, v_hits3, v_hits10 = metric(h_or_t, entity_num, scores, to_be_filtered, torch.LongTensor(valid[v_start:v_end]), v_end - v_start)
+            v_mr, v_mrr, v_hits1, v_hits3, v_hits10 = specific_ranking(h_or_t=h_or_t, batch_size=v_end - v_start,
+                                                                       entities_num=entity_num,
+                                                                       to_be_filtered=to_be_filtered,
+                                                                       samples=torch.LongTensor(valid[v_start:v_end]),
+                                                                       model=model)
+            # print("after metric:{}".format(torch.cuda.memory_allocated(0)))
+            mr += v_mr * (v_end - v_start)
+            mrr += v_mrr * (v_end - v_start)
+            hits1 += v_hits1
+            hits3 += v_hits3
+            hits10 += v_hits10
+            if v_end == valid.shape[0]:
+                break
+            else:
+                v_start = v_end
+                v_end = min(v_end + batch_size, valid.shape[0])
 
-    mr /= valid.shape[0]
-    mrr /= valid.shape[0]
-    hits1 /= valid.shape[0]
-    hits3 /= valid.shape[0]
-    hits10 /= valid.shape[0]
+        mr /= valid.shape[0]
+        mrr /= valid.shape[0]
+        hits1 /= valid.shape[0]
+        hits3 /= valid.shape[0]
+        hits10 /= valid.shape[0]
 
-    if mrr > best_mrr:
-        best_mrr = mrr
-        torch.save(model, './output/' + dataset + '/' + name + '/best_epoch_{}.ckpt'.format(i))
-        best_epoch = i
-    if hits1 > best_hits1:
-        best_hits1 = hits1
-    if hits3 > best_hits3:
-        best_hits3 = hits3
-    if hits10 > best_hits10:
-        best_hits10 = hits10
-    print('Current learning rate: {}\n'.format(lr))
-    print('Epoch: {} \nValidation: Loss: {} \tMRR: {} \tHits@1: {} \tHits@3: {}\tHits@10: {}'.format(i, v_loss, mrr, hits1, hits3, hits10))
-    fout.write('Current learning rate: {}\n'.format(lr))
-    fout.write('Epoch: {} \nValidation: Loss: {} \tMRR: {} \tHits@1: {} \tHits@3: {}\tHits@10: {}\n'.format(i, v_loss, mrr, hits1, hits3, hits10))
+        if mrr > best_mrr:
+            best_mrr = mrr
+            torch.save(model, './output/' + dataset + '/' + name + '/best_epoch_{}.ckpt'.format(i))
+            best_epoch = i
+        if hits1 > best_hits1:
+            best_hits1 = hits1
+        if hits3 > best_hits3:
+            best_hits3 = hits3
+        if hits10 > best_hits10:
+            best_hits10 = hits10
+        print('Current learning rate: {}\n'.format(lr))
+        print('Epoch: {} \nValidation: Loss: {} \tMRR: {} \tHits@1: {} \tHits@3: {}\tHits@10: {}'.format(i, v_loss, mrr,
+                                                                                                         hits1, hits3,
+                                                                                                         hits10))
+        fout.write('Current learning rate: {}\n'.format(lr))
+        fout.write(
+            'Epoch: {} \nValidation: Loss: {} \tMRR: {} \tHits@1: {} \tHits@3: {}\tHits@10: {}\n'.format(i, v_loss, mrr,
+                                                                                                         hits1, hits3,
+                                                                                                         hits10))
 
-    if i % 100 == 0:
+    if i % 1000 == 0:
         best_model = torch.load('./output/' + dataset + '/' + name + '/best_epoch_{}.ckpt'.format(best_epoch))
         print('Test at epoch{}: \n'.format(i))
         fout.write('Test at epoch{}: \n'.format(i))
@@ -266,4 +283,3 @@ for i in range(1, epochs + 1):
 
 print('BEST: MRR: {} \tHits@1: {} \tHits@3: {}\tHits@10: {}'.format(best_mrr, best_hits1, best_hits3, best_hits10))
 fout.write('BEST: MRR: {} \tHits@1: {} \tHits@3: {}\tHits@10: {}\n'.format(best_mrr, best_hits1, best_hits3, best_hits10))
-
